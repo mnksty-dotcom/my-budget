@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>SmartBudget - スマート家計簿 & 用途別分析</title>
+  <meta name="description" content="固定費・変動費・買わなくてもよい出費を多角的にグラフ化・分析できる自分専用のスマート家計簿アプリ。">
+  <meta name="theme-color" content="#090d16">
+
+  <!-- iOS PWA / WebApp 設定 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="スマート家計簿">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.jpg">
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Google Fonts: Outfit & Noto Sans JP -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Chart.js (オフライン完全対応) -->
+  <script src="js/chart.min.js"></script>
+
+  <!-- スタイルシート -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ヘッダー -->
+    <header class="app-header">
+      <div class="brand-wrapper">
+        <img src="icons/icon-192.jpg" alt="SmartBudget App Icon" class="brand-icon">
+        <h1 class="brand-title">SmartBudget</h1>
+      </div>
+      <span class="header-badge">iOS PWA</span>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <!-- ==============================================
+           1. 収支入力画面 (view-input)
+           ============================================== -->
+      <section id="view-input" class="view-screen active">
+        <!-- 収支切り替えトグル -->
+        <div class="type-toggle-container">
+          <button type="button" class="type-toggle-btn active" data-type="expense" id="btn-type-expense">
+            支出（出ていくお金）
+          </button>
+          <button type="button" class="type-toggle-btn" data-type="income" id="btn-type-income">
+            収入（入ってくるお金）
+          </button>
+        </div>
+
+        <!-- 金額入力カード -->
+        <div class="card amount-display-card">
+          <label for="input-amount" class="form-label">金額を入力</label>
+          <div class="amount-input-row">
+            <span class="currency-symbol">¥</span>
+            <input type="number" 
+                   id="input-amount" 
+                   class="amount-input" 
+                   placeholder="0" 
+                   inputmode="numeric" 
+                   pattern="[0-9]*"
+                   autocomplete="off">
+          </div>
+          <div class="quick-amount-row">
+            <button type="button" class="quick-amount-btn" data-add="100">+100</button>
+            <button type="button" class="quick-amount-btn" data-add="500">+500</button>
+            <button type="button" class="quick-amount-btn" data-add="1000">+1,000</button>
+            <button type="button" class="quick-amount-btn" data-add="10000">+10,000</button>
+          </div>
+        </div>
+
+        <!-- 日付選択カード -->
+        <div class="card">
+          <label for="input-date" class="form-label">日付</label>
+          <div class="date-row">
+            <input type="date" id="input-date" class="input-box date-input">
+            <button type="button" class="btn-small-date" id="btn-date-today">今日</button>
+            <button type="button" class="btn-small-date" id="btn-date-yesterday">昨日</button>
+          </div>
+        </div>
+
+        <!-- カテゴリ選択エリア（JSで大項目・中項目・小項目を動的描画） -->
+        <div class="card">
+          <div id="input-categories-wrapper">
+            <!-- JSで動的レンダリング -->
+          </div>
+        </div>
+
+        <!-- メモカード -->
+        <div class="card">
+          <label for="input-note" class="form-label">メモ・店舗名（任意）</label>
+          <input type="text" id="input-note" class="input-box" placeholder="例: セブンイレブン、Amazonプライムなど">
+        </div>
+
+        <!-- 保存ボタン -->
+        <button type="button" class="btn-primary-action" id="btn-save-transaction">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          この内容で記録する
+        </button>
+      </section>
+
+      <!-- ==============================================
+           2. グラフ・分析画面 (view-charts)
+           ============================================== -->
+      <section id="view-charts" class="view-screen">
+        <!-- 期間切り替えタブ (日/週/月/年) -->
+        <div class="period-tabs-wrapper">
+          <button type="button" class="period-btn" data-period="day" id="tab-period-day">日別</button>
+          <button type="button" class="period-btn" data-period="week" id="tab-period-week">週別</button>
+          <button type="button" class="period-btn active" data-period="month" id="tab-period-month">月別</button>
+          <button type="button" class="period-btn" data-period="year" id="tab-period-year">年別</button>
+        </div>
+
+        <!-- 期間ナビゲーション -->
+        <div class="period-nav-row">
+          <button type="button" class="nav-arrow-btn" id="btn-period-prev" aria-label="前の期間へ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div class="period-display-wrap">
+            <span class="period-display-text" id="period-display-label">2026年 10月</span>
+            <button type="button" class="btn-today-pill" id="btn-period-current">現在</button>
+          </div>
+          <button type="button" class="nav-arrow-btn" id="btn-period-next" aria-label="次の期間へ">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <!-- 収支サマリーカード -->
+        <div class="summary-stats-grid">
+          <div class="stat-box">
+            <div class="stat-label">支出計</div>
+            <div class="stat-value text-danger" id="stat-total-expense">¥0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">収入計</div>
+            <div class="stat-value text-success" id="stat-total-income">¥0</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">収支残高</div>
+            <div class="stat-value" id="stat-balance">¥0</div>
+          </div>
+        </div>
+
+        <!-- ★注目機能：「買わなくてもよかった出費（裁量・嗜好）」ハイライトカード -->
+        <div class="highlight-optional-card">
+          <div class="highlight-header">
+            <div class="highlight-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span>買わなくてもよかった出費（浪費・裁量）</span>
+            </div>
+            <span class="highlight-badge" id="stat-optional-rate">0%</span>
+          </div>
+          <div class="highlight-amount-row">
+            <span class="highlight-amount" id="stat-optional-amount">¥0</span>
+            <span class="highlight-desc">支出全体の割合</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="stat-optional-bar" style="width: 0%; background: linear-gradient(90deg, #f59e0b, #f43f5e);"></div>
+          </div>
+        </div>
+
+        <!-- 固定費 vs 変動費（大項目）比率バー -->
+        <div class="card ratio-fixed-variable-card">
+          <div class="card-title">大項目バランス（固定費 vs 変動費）</div>
+          <div class="ratio-row">
+            <span class="ratio-label-fixed">固定費: <strong id="stat-fixed-amount">¥0</strong> (<span id="stat-fixed-pct">0%</span>)</span>
+            <span class="ratio-label-variable">変動費: <strong id="stat-variable-amount">¥0</strong> (<span id="stat-variable-pct">0%</span>)</span>
+          </div>
+          <div class="ratio-split-bar">
+            <div class="bar-fixed" id="ratio-fixed-bar" style="width: 50%;"></div>
+            <div class="bar-variable"></div>
+          </div>
+        </div>
+
+        <!-- メイン推移グラフ（折れ線・棒グラフ） -->
+        <div class="card">
+          <div class="card-title">
+            <span>期間推移グラフ</span>
+            <span style="font-size: 0.72rem; color: var(--text-dim);">収入/支出/嗜好品</span>
+          </div>
+          <div class="chart-container-card">
+            <canvas id="chart-trend-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- 用途・目的別（中項目）ドーナツグラフ -->
+        <div class="card">
+          <div class="card-title">用途・目的別内訳（中項目）</div>
+          <div class="chart-container-donut">
+            <canvas id="chart-donut-canvas"></canvas>
+          </div>
+        </div>
+
+        <!-- 用途別ランキングリスト -->
+        <div class="card">
+          <div class="card-title">支出ランキング（多い順）</div>
+          <div id="charts-ranking-container">
+            <!-- JSで動的レンダリング -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           3. 明細・履歴一覧画面 (view-history)
+           ============================================== -->
+      <section id="view-history" class="view-screen">
+        <!-- 絞り込みフィルターバー -->
+        <div class="history-filter-bar">
+          <select id="history-month-filter" class="select-box" aria-label="対象月">
+            <option value="all">全期間</option>
+          </select>
+          <select id="history-type-filter" class="select-box" aria-label="収支区分">
+            <option value="all">すべて表示</option>
+            <option value="expense">支出のみ</option>
+            <option value="income">収入のみ</option>
+          </select>
+        </div>
+
+        <!-- 明細リストコンテナ（JSで動的レンダリング） -->
+        <div id="history-list-container"></div>
+      </section>
+
+      <!-- ==============================================
+           4. 設定 & カテゴリ管理画面 (view-settings)
+           ============================================== -->
+      <section id="view-settings" class="view-screen">
+        <!-- iPhone PWA インストール案内カード -->
+        <div class="card" style="border-color: rgba(139, 92, 246, 0.4); background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(9, 13, 22, 0.9) 100%);">
+          <div class="card-title" style="color: #c084fc;">
+            <span>📲 iPhoneのホーム画面に追加する方法</span>
+          </div>
+          <p style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 8px;">
+            1. Safari下部の共有ボタン（四角から上矢印が出ているアイコン）をタップ<br>
+            2. メニュー内の「<strong>ホーム画面に追加</strong>」を選択<br>
+            3. 右上の「追加」をタップすれば、通常のアプリと同じように期限なしで全画面起動できます！
+          </p>
+        </div>
+
+        <!-- カテゴリ管理カード -->
+        <div class="card">
+          <div class="card-title">
+            <span>カテゴリ編集（中項目・小項目）</span>
+          </div>
+          <p style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 12px;">
+            大項目（固定費・変動費・収入）に紐づく中項目や小項目を自由に追加・削除・編集できます。「買わなくてもよい出費」にチェックを入れると、グラフで浪費分析が可能です。
+          </p>
+          <div id="settings-categories-list">
+            <!-- JSで動的レンダリング -->
+          </div>
+        </div>
+
+        <!-- データ管理・バックアップカード -->
+        <div class="card">
+          <div class="card-title">データ管理・バックアップ</div>
+          <p style="font-size: 0.78rem; color: var(--text-dim); margin-bottom: 10px;">
+            データはブラウザ（端末内）に自動保存されます。機種変更時や定期バックアップにファイル保存をご利用ください。
+          </p>
+          <div class="backup-actions-grid">
+            <button type="button" class="btn-outline" id="btn-export-json">JSONバックアップ</button>
+            <label class="btn-outline" style="cursor: pointer;">
+              データ復元
+              <input type="file" id="input-import-json" accept=".json" style="display: none;">
+            </label>
+            <button type="button" class="btn-outline" id="btn-seed-sample">サンプルデータ生成</button>
+            <button type="button" class="btn-outline btn-outline-danger" id="btn-clear-all">全データ消去</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ボトムナビゲーションバー (iOS TabBar) -->
+    <nav class="bottom-nav">
+      <button type="button" class="nav-item active" data-tab="input" id="nav-btn-input">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        <span>入力</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="charts" id="nav-btn-charts">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+        <span>グラフ・分析</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="history" id="nav-btn-history">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        <span>明細履歴</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="settings" id="nav-btn-settings">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>設定</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ==============================================
+       モーダル群
+       ============================================== -->
+  <!-- 1. 中項目追加モーダル -->
+  <div id="add-medium-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">中項目の追加</h2>
+        <button type="button" class="modal-close-btn" id="btn-close-modal">&times;</button>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+        追加先の大項目: <strong id="modal-major-name" style="color: #a78bfa;"></strong>
+      </p>
+      <div style="margin-bottom: 14px;">
+        <label for="modal-medium-name" class="form-label">中項目名（用途・目的）</label>
+        <input type="text" id="modal-medium-name" class="input-box" placeholder="例: カフェ・お茶、書籍、外食など">
+      </div>
+      <div style="margin-bottom: 14px;">
+        <label class="toggle-optional-label" style="font-size: 0.85rem; cursor: pointer;">
+          <input type="checkbox" id="modal-is-optional">
+          <span>買わなくてもよい出費（浪費・裁量）として集計する</span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-outline" style="flex: 1;" onclick="document.getElementById('add-medium-modal').classList.remove('active')">キャンセル</button>
+        <button type="button" class="btn-primary-action" id="btn-save-medium-modal" style="flex: 1; margin-top: 0;">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 明細編集・削除モーダル -->
+  <div id="edit-tx-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">明細の編集</h2>
+        <button type="button" class="modal-close-btn" id="btn-close-edit-tx-modal">&times;</button>
+      </div>
+      <p id="edit-tx-category-info" style="font-size: 0.85rem; color: #a78bfa; font-weight: 600; margin-bottom: 12px;"></p>
+      <div style="margin-bottom: 12px;">
+        <label for="edit-tx-amount" class="form-label">金額 (円)</label>
+        <input type="number" id="edit-tx-amount" class="input-box">
+      </div>
+      <div style="margin-bottom: 12px;">
+        <label for="edit-tx-date" class="form-label">日付</label>
+        <input type="date" id="edit-tx-date" class="input-box">
+      </div>
+      <div style="margin-bottom: 12px;">
+        <label for="edit-tx-minor" class="form-label">小項目（品名・具体物）</label>
+        <input type="text" id="edit-tx-minor" class="input-box">
+      </div>
+      <div style="margin-bottom: 14px;">
+        <label for="edit-tx-note" class="form-label">メモ</label>
+        <input type="text" id="edit-tx-note" class="input-box">
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn-outline btn-outline-danger" id="btn-delete-tx">削除</button>
+        <button type="button" class="btn-primary-action" id="btn-update-tx" style="flex: 1; margin-top: 0;">更新する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="app-toast"></div>
+
+  <!-- 初期日付の自動設定 -->
+  <script>
+    document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+  </script>
+
+  <!-- アプリスクリプト (ES Module) -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
